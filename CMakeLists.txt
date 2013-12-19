@@ -5,7 +5,7 @@ project (nbn)
 option(build_test "Build all of NBN's unit tests." ON)
 
 include_directories(/usr/include/eigen3)
-set(CMAKE_CXX_FLAGS "${cmake_cxx_flags} -O3 -std=c++11")
+set(CMAKE_CXX_FLAGS "${cmake_cxx_flags} -O3 -std=c++11 -fopenmp")
 
 add_subdirectory(src)
 

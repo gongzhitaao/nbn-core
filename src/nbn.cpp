@@ -1,65 +1,62 @@
 #include "nbn.h"
 
+#include <algorithm>
 #include <iostream>
 
 #define EIGEN_NO_DEBUG
+#define CALL_MEMBER_FUNC(object_ptr, func_ptr) ((object_ptr)->*(func_ptr))
 
-NBN::NBN() :
-  num_input_(0),
-  num_output_(0),
-  num_weight_(0),
-  train_func_{&NBN::ebp, &NBN::nbn}
+void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
 {
-}
+  // Topology in config files are 1-based, while in program, 0-based
+  // are more convenient.
+  topology_.reserve(topology.size());
+  std::transform(topology.begin(), topology.end(), topology_.begin(),
+                 [](int i) -> int { return i - 1; });
 
-NBN::~NBN()
-{
-}
+  // 1-based to 0-based
+  output_id_.reserve(output.size());
+  std::transform(output.begin(), output.end(), output_id_.begin(),
+                 [](int i) -> int { return i - 1; });
 
-#define CALL_MEMBER_FUNC(object, func_ptr) ((object).*(func_ptr))
-
-void NBN::set_topology(const nbn_index_t &topology)
-{
-  topology_ = topology;
   neuron_index_.clear();
   layer_index_.clear();
 
-  neuron_index_.push_back(num_input_);
+  neuron_index_.push_back(0);
   layer_index_.push_back(topology_[0]);
   int size = topology_.size();
-  for (int i = 1,
-	 max_last_layer_neuron_id = 2,
-	 updated = 0;
-       i < size; ++i) {
-    if (topology_[i] > topology_[neuron_index_.back() - num_input_]) {
-      neuron_index_.push_back(i + num_input_);
+
+  for (int i = 1, j = 2, updated = 0; i < size; ++i) {
+    if (topology_[i] > topology_[neuron_index_.back()]) {
+      neuron_index_.push_back(i);
       updated = 0;
-    } else if (topology_[i] > max_last_layer_neuron_id && !updated) {
-      max_last_layer_neuron_id = topology_[neuron_index_[neuron_index_.size() - 2] - num_input_];
-      layer_index_.push_back(topology_[neuron_index_.back() - num_input_]);
+    } else if (topology_[i] > j && !updated) {
+      j = topology_[neuron_index_[neuron_index_.size() - 2]];
+      layer_index_.push_back(topology_[neuron_index_.back()]);
       updated = 1;
     }
   }
 
-  num_input_ = topology_[0] - 1;
-  num_output_ = topology_[neuron_index_.back()] - layer_index_.back() + 1;
-  num_weight_ = size - neuron_index_.size();
-
-  neuron_index_.push_back(size); // for convinience
+  // both for convinience
+  neuron_index_.push_back(size);
+  layer_index_.push_back(get_num_neuron());
 }
 
-bool NBN::train(std::vector<double> inputs, std::vector<double> desired_outputs,
-		int max_iteration, double max_error)
+bool NBN::train(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+                int max_iteration, double max_error)
 {
-  return CALL_MEMBER_FUNC(*this, train_func_[training_algorithm_])(max_iteration, max_error);
+  return CALL_MEMBER_FUNC(this, train_func_[training_algorithm_])(
+      inputs, desired_outputs, max_iteration, max_error);
 }
 
-bool NBN::nbn(int max_iteration, double max_error)
+bool NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
 {
   return true;
 }
 
-bool NBN::ebp(int max_iteration, double max_error)
+bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
 {
   return true;
 }
