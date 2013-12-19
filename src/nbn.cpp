@@ -10,12 +10,12 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
 {
   // Topology in config files are 1-based, while in program, 0-based
   // are more convenient.
-  topology_.reserve(topology.size());
+  topology_.resize(topology.size());
   std::transform(topology.begin(), topology.end(), topology_.begin(),
                  [](int i) -> int { return i - 1; });
 
   // 1-based to 0-based
-  output_id_.reserve(output.size());
+  output_id_.resize(output.size());
   std::transform(output.begin(), output.end(), output_id_.begin(),
                  [](int i) -> int { return i - 1; });
 
@@ -23,7 +23,9 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   layer_index_.clear();
 
   neuron_index_.push_back(0);
+  layer_index_.push_back(0);
   layer_index_.push_back(topology_[0]);
+
   int size = topology_.size();
 
   for (int i = 1, j = 2, updated = 0; i < size; ++i) {
