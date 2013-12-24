@@ -21,7 +21,7 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   layer_index_.clear();
 
   neuron_index_.push_back(0);
-  layer_index_.push_back(0);
+  layer_index_.push_back(topology_[0]);
   int size = topology_.size();
   for (int i = 1, updated = 0; i < size; ++i) {
     if (topology_[i] > topology_[neuron_index_.back()]) {
@@ -37,21 +37,21 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   // sort last neuron inputs
   std::sort(topology_.begin() + neuron_index_.back() + 1, topology_.end());
 
-  for (unsigned i = 0; i < topology_.size(); ++i)
-    std::cout << topology_[i] << ' ';
-  std::cout << std::endl;
-
-  // both for convinience
+  // // both for convinience
   neuron_index_.push_back(size);
-  layer_index_.push_back(get_num_neuron());
+
+  int num_input = get_num_input();
+  layer_index_.push_back(get_num_neuron() + num_input);
 
   // update index in lookup table
   int num_neuron = get_num_neuron();
   lookup_ = -1 * Eigen::MatrixXi::Ones(num_neuron, num_neuron);
   for (int i = 0, j = 0; i < size; ++i) {
-    int neuron = topology_[i];
-    if (neuron > j) j = neuron;
-    lookup_(neuron, j) = i;
+    int neuron = topology_[i] - num_input;
+    if (neuron >= 0) {
+      if (neuron > j) j = neuron;
+      lookup_(neuron, j) = i;
+    }
   }
 }
 
@@ -116,12 +116,11 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
         int layer = get_neuron_layer(cur);
         for (int j = 0; j < layer_index_[layer]; ++j) {
           int layerj = get_neuron_layer(j);
-          double signal = 0.0;
-          for (int k = beg + 1; k < end; ++k)
-            if (topology_[k] > layer_index_[layerj])
-              signal += weight_[lookup_(topology_[k], cur)] * delta(topology_[k], j);
+          double signal = lookup_(j, cur) >= 0 ? weight_[lookup_(j, cur)] * delta(j, j) : 0.0;
+          for (int k = bisearch_ge(layer_index_[layerj + 1],
+                                   topology_.data() + beg + 1, end - beg); k < end; ++k)
+            signal += weight_[lookup_(topology_[k], cur)] * delta(topology_[k], j);
           delta(cur, j) = derivative * signal;
-          std::cout << cur << ' ' << j << std::endl;
         }
       }
 
@@ -140,10 +139,10 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       }
     }
 
-    // std::cout << delta << std::endl;
-    // std::cout << output.transpose() << std::endl;
-    // std::cout << gradient.transpose() << std::endl;
-    // std::cout << jacobian << std::endl;
+    std::cout << delta << std::endl;
+    std::cout << output.transpose() << std::endl;
+    std::cout << gradient.transpose() << std::endl;
+    std::cout << jacobian << std::endl;
 
     // if (error > last_error) {
     //   ++fail_count;

@@ -144,7 +144,7 @@ class NBN
 
   // Number of neurons, *including* the input neurons.
   int get_num_neuron() const {
-    return neuron_index_.size() - 1 + get_num_input();
+    return neuron_index_.size() - 1;
   }
 
   std::vector<int> get_layer_size() const {
@@ -187,21 +187,34 @@ class NBN
   bool nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
            int max_iteration, double max_error);
 
-  // Get the layer number the neuron i is in.  Both are 0-based.
-  int get_neuron_layer(int i) const {
-    int low = 0, high = get_num_layer() - 1, mid;
-
-    // Only one layer
+  int bisearch_le(int key, const int *arr, int size) const {
+    int low = 0, high = size - 1;
+    // only one layer
     if (low == high) return low;
-
-    if (i >= layer_index_[high]) return high;
+    if (key >= arr[high]) return high;
 
     while (low < high) {
-      mid = (low + high) / 2;
-      if (layer_index_[mid] > i) high = mid;
+      int mid = (low + high) / 2;
+      if (arr[mid] > key) high = mid;
       else low = mid + 1;
     }
     return high - 1;
+  }
+
+  int bisearch_ge(int key, const int *arr, int size) const {
+    int low = 0, high = size - 1;
+    if (key > arr[high]) return size;
+    while (low < high) {
+      int mid = (low + high) / 2;
+      if (arr[mid] >= key) high = mid;
+      else low = mid + 1;
+    }
+    return high;
+  }
+
+  // Get the layer number the neuron i is in.  Both are 0-based.
+  int get_neuron_layer(int i) const {
+    return bisearch_le(i, layer_index_.data(), get_num_layer());
   }
 
   // A long vector that contains the topology of the whole network.
