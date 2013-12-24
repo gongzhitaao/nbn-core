@@ -1,6 +1,7 @@
 #ifndef NBN_H_
 #define NBN_H_
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -8,6 +9,8 @@
 
 class NBN
 {
+#define CALL_MEMBER_FUNC(object_ptr, func_ptr) ((object_ptr)->*(func_ptr))
+
   typedef bool (NBN::*nbn_train_func_t) (const std::vector<double> &, const std::vector<double> &,
                                          int, double);
   typedef double (NBN::*nbn_activation_func_t) (double, double);
@@ -29,6 +32,14 @@ class NBN
     NBN_ACTIVATION_ENUM
   };
 
+  struct nbn_param {
+    double alpha;
+    double mu;
+    double mu_min, mu_max;
+    double scale_down, scale_up;
+    int fail_max;
+  };
+
   NBN()
       : activation_func_{&NBN::linear, &NBN::threshold, &NBN::threshold_s, &NBN::sigmoid, &NBN::tanh}
       , activation_func_d_{&NBN::linear_d, &NBN::threshold, &NBN::threshold_s, &NBN::sigmoid_d, &NBN::tanh_d}
@@ -42,6 +53,71 @@ class NBN
   }
 
   void set_topology(const std::vector<int> &topology, const std::vector<int> &output);
+
+  void set_gains(const std::vector<double> &gains) {
+    gain_ = gains;
+  }
+
+  void set_activations(const std::vector<nbn_activation_func_enum> &activations) {
+    std::copy(activations.begin(), activations.end(), activation_.begin() + get_num_input());
+  }
+
+  void set_algorithm(nbn_train_enum training_algorithm) {
+    training_algorithm_ = training_algorithm;
+  }
+
+  void set_learning_const(double alpha) { param_.alpha = alpha; }
+  double get_learning_const() const { return param_.alpha; }
+
+  void set_mu(double mu) { param_.mu = mu; }
+  double get_mu() const { return param_.mu; }
+
+  void set_mu_min(double mu_min) { param_.mu_min = mu_min; }
+  double get_mu_min() const { return param_.mu_min; }
+
+  void set_mu_max(double mu_max) { param_.mu_max = mu_max; }
+  double get_mu_max() const { return param_.mu_max; }
+
+  void set_scale_up(double scale_up) { param_.scale_up = scale_up; }
+  double get_scale_up() const { return param_.scale_up; }
+
+  void set_scale_down(double scale_down) { param_.scale_down = scale_down; }
+  double get_scale_down() const { return param_.scale_down; }
+
+  void init_default() {
+    int num_input = get_num_input();
+    int num_output = get_num_output();
+    int num_weight = get_num_weight();
+    int num_neuron = get_num_neuron();
+
+    // default activation, linear for input and output, sigmoid for
+    // hidden layers
+    activation_.resize(num_neuron);
+    std::fill(activation_.begin(), activation_.begin() + num_input, NBN_LINEAR);
+    std::fill(activation_.begin() + num_input, activation_.end(), NBN_SIGMOID_SYMMETRIC);
+
+    // for (int i = 0; i < num_output; ++i)
+    //   activation_[output_id_[i]] = NBN_LINEAR;
+
+    // random initialized weights
+    weight_ = Eigen::VectorXd::Random(num_weight);
+    // weight_ = Eigen::VectorXd::Zero(num_weight);
+
+    // gain will usually be all 1's.
+    gain_.resize(num_neuron);
+    std::fill(gain_.begin(), gain_.end(), 1.0);
+
+    // nbn parameters
+    param_.mu = 0.01;
+    param_.mu_min = 1e-15;
+    param_.mu_max = 1e15;
+    param_.scale_up = 10;
+    param_.scale_down = 0.1;
+    param_.fail_max = 10;
+
+    // default using NBN algorithm
+    training_algorithm_ = NBN_NBN;
+  }
 
   int get_num_input() const {
     return topology_[0];
@@ -79,9 +155,12 @@ class NBN
   }
 
   bool train(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
-             int max_iteration, double max_error);
+             int max_iteration, double max_error) {
+    return CALL_MEMBER_FUNC(this, train_func_[training_algorithm_])(
+        inputs, desired_outputs, max_iteration, max_error);
+  }
 
-  bool run(const std::vector<double> input);
+  std::vector<double> run(const std::vector<double> &inputs);
 
  private:
 
@@ -108,6 +187,23 @@ class NBN
   bool nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
            int max_iteration, double max_error);
 
+  // Get the layer number the neuron i is in.  Both are 0-based.
+  int get_neuron_layer(int i) const {
+    int low = 0, high = get_num_layer() - 1, mid;
+
+    // Only one layer
+    if (low == high) return low;
+
+    if (i >= layer_index_[high]) return high;
+
+    while (low < high) {
+      mid = (low + high) / 2;
+      if (layer_index_[mid] > i) high = mid;
+      else low = mid + 1;
+    }
+    return high - 1;
+  }
+
   // A long vector that contains the topology of the whole network.
   // Each neuron id is followed by its input.  Assumption is that the
   // neurons in the network are number from left to right, i.e., layer
@@ -129,10 +225,19 @@ class NBN
   std::vector<int> output_id_;
 
   // Gain for each neuron, usually it's all 1's.
-  Eigen::VectorXd gain_;
+  std::vector<double> gain_;
 
-  // Weight for each connection
+  // Stores weight for every connection in a long vector which has the
+  // same structure as topology_.
   Eigen::VectorXd weight_;
+
+  // Index mapping from (i, j) to index in topology_.  Since the
+  // connection is undirected, this is a symmetric matrix.  We only
+  // use the upper triangle so that the index (i, j) should always
+  // satisfy i <= j.
+  Eigen::MatrixXi lookup_;
+
+  nbn_param param_;
 
   // Activation function for each neuron, for input layer, it's always
   // linear.  Other layers are different based on user settings.
