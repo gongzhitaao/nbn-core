@@ -93,8 +93,7 @@ class NBN
     // default activation, linear for input and output, sigmoid for
     // hidden layers
     activation_.resize(num_neuron);
-    std::fill(activation_.begin(), activation_.begin() + num_input, NBN_LINEAR);
-    std::fill(activation_.begin() + num_input, activation_.end(), NBN_SIGMOID_SYMMETRIC);
+    std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
 
     // for (int i = 0; i < num_output; ++i)
     //   activation_[output_id_[i]] = NBN_LINEAR;

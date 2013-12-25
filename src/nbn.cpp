@@ -45,13 +45,11 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
 
   // update index in lookup table
   int num_neuron = get_num_neuron();
-  lookup_ = -1 * Eigen::MatrixXi::Ones(num_neuron, num_neuron);
+  lookup_ = -1 * Eigen::MatrixXi::Ones(num_neuron + num_input, num_neuron + num_input);
   for (int i = 0, j = 0; i < size; ++i) {
-    int neuron = topology_[i] - num_input;
-    if (neuron >= 0) {
-      if (neuron > j) j = neuron;
-      lookup_(neuron, j) = i;
-    }
+    int neuron = topology_[i];
+    if (neuron > j) j = neuron;
+    lookup_(neuron, j) = i;
   }
 }
 
@@ -71,67 +69,95 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
   int num_pattern = inputs.size() / num_input;
 
   Eigen::MatrixXd hessian(num_weight, num_weight);
+  Eigen::MatrixXd Identity = Eigen::MatrixXd::Identity(num_weight, num_weight);
 
   // Same structure as topology_, so neuron_index_ applies here.
   Eigen::RowVectorXd jacobian(num_weight);
   Eigen::VectorXd gradient(num_weight);
 
-  // Contains output for each neuron, including input neurons
-  Eigen::VectorXd output(num_neuron);
+  // Contains output for each neuron, including input
+  Eigen::VectorXd output(num_neuron + num_input);
 
-  // Stores the signal gain for backward computation.  This vector has
-  // same structurs as weight_.
-  Eigen::MatrixXd delta = Eigen::MatrixXd::Zero(num_neuron, num_neuron);
+  // Stores the signal gain for backward computation.
+  Eigen::MatrixXd delta(num_neuron, num_neuron);
 
-  Eigen::MatrixXd w = Eigen::MatrixXd::Zero(num_weight, num_weight);
   double last_error = std::numeric_limits<double>::max();
   int fail_count = 0;
 
   for (int iteration = 0; iteration < max_iteration; ++iteration) {
 
     double error = 0.0;
+    hessian.setZero();
+    gradient.setZero();
+
     for (int ind_pattern = 0; ind_pattern < num_pattern; ++ind_pattern) {
+
+      delta.setZero();
+      output.setZero();
 
       // output of the input neurons
       output.head(num_input) = Eigen::Map<const Eigen::VectorXd>(inputs.data() + ind_pattern * num_input,
                                                                  num_input);
 
       // Forward computation.
-      for (int i = 0; i < num_neuron - num_input; ++i) {
-        const int beg = neuron_index_[i],
-                  end = neuron_index_[i + 1],
-                  cur = topology_[beg];
+      for (int i = 0; i < num_neuron; ++i) {
+        const int beg = neuron_index_[i],     // start postion for current neuron in topology_
+                  end = neuron_index_[i + 1], // past-the-end position for current neuron in topology_
+                 ind0 = topology_[beg],       // index of current neuron considering input
+                 ind1 = ind0 - num_input;     // index of current neuron without considering input
 
-        // gather inputs
+        // calculate output of current neuron
         double net = weight_[beg];
         for (int j = beg + 1; j < end; ++j)
           net += weight_[j] * output[topology_[j]];
-        output[cur] = CALL_MEMBER_FUNC(this, activation_func_[activation_[cur]])(net, gain_[cur]);
+        output[ind0] = CALL_MEMBER_FUNC(this, activation_func_[activation_[ind1]])(net, gain_[ind1]);
 
-        // update signal gain
-        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[cur]])
-                            (output[cur], gain_[cur]);
+        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[ind1]])
+                            (output[ind0], gain_[ind1]);
 
-        delta(cur, cur) = derivative;
-        int layer = get_neuron_layer(cur);
-        for (int j = 0; j < layer_index_[layer]; ++j) {
-          int layerj = get_neuron_layer(j);
-          double signal = lookup_(j, cur) >= 0 ? weight_[lookup_(j, cur)] * delta(j, j) : 0.0;
+        // Update delta table.  Don't try to change anything here
+        // unless you know what you're doing.
+        delta(ind1, ind1) = derivative;
+        int cur_layer = get_neuron_layer(ind0);
+        for (int j0 = num_input; j0 < layer_index_[cur_layer]; ++j0) {
+          int j1 = j0 - num_input;
+          int layerj = get_neuron_layer(j0);
+          double signal = lookup_(j0, ind0) >= 0 ? weight_[lookup_(j0, ind0)] * delta(j1, j1) : 0.0;
           for (int k = bisearch_ge(layer_index_[layerj + 1],
-                                   topology_.data() + beg + 1, end - beg); k < end; ++k)
-            signal += weight_[lookup_(topology_[k], cur)] * delta(topology_[k], j);
-          delta(cur, j) = derivative * signal;
+                                   topology_.data() + beg + 1, end - beg) + beg + 1; k < end; ++k)
+            signal += weight_[lookup_(topology_[k], ind0)] * delta(topology_[k] - num_input, j1);
+          delta(ind1, j1) = derivative * signal;
         }
       }
 
       // Backward propagation
       for (int ind_output = 0; ind_output < num_output; ++ind_output) {
-        int i = output_id_[ind_output];
-        int layeri = get_neuron_layer(i);
-        double e = desired_outputs[ind_output] - output[i];
+        int i0 = output_id_[ind_output],
+            i1 = i0 - num_input,
+        layeri = get_neuron_layer(i0);
+        double e = desired_outputs[ind_pattern * num_output + ind_output] - output[i0];
         jacobian.setZero();
-        for (int j = 0; j < layer_index_[layeri]; ++j)
-          jacobian[lookup_(j, i)] = output[j] * delta(i, j);
+
+        // Update jacobian for neurons in previous layers
+        for (int j = 0; j < layer_index_[layeri] - num_input; ++j) {
+          const int beg = neuron_index_[j],     // start postion for current neuron in topology_
+                    end = neuron_index_[j + 1]; // past-the-end position for current neuron in topology_
+
+          jacobian[beg] = delta(i1, j);
+          for (int k = beg + 1; k < end; ++k)
+            jacobian[k] = output[topology_[k]] * delta(i1, j);
+        }
+
+        // Update jacobian for inputs to the current output.  This is
+        // neccessary because we might have outputs from hidden
+        // neurons.
+        const int beg = neuron_index_[i1],
+                  end = neuron_index_[i1 + 1],
+                 ind1 = topology_[beg] - num_input;
+
+        jacobian[beg] = delta(i1, ind1);
+        for (int k = beg + 1; k < end; ++k)
+          jacobian[k] = output[topology_[k]] * delta(i1, ind1);
 
         gradient += jacobian.transpose() * e;
         hessian += jacobian.transpose() * jacobian;
@@ -139,31 +165,24 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       }
     }
 
-    std::cout << delta << std::endl;
-    std::cout << output.transpose() << std::endl;
-    std::cout << gradient.transpose() << std::endl;
-    std::cout << jacobian << std::endl;
+    if (error > last_error) {
+      ++fail_count;
+      // if (fail_count > param_.fail_max) return false;
 
-    // if (error > last_error) {
-    //   ++fail_count;
-    //   param_.mu *= param_.scale_up;
-    //   if (param_.mu > param_.mu_max) param_.mu = param_.mu_max;
-    // } else {
+      param_.mu *= param_.scale_up;
+      if (param_.mu > param_.mu_max) param_.mu = param_.mu_max;
+    } else {
 
-    //   if (error < max_error) return true;
+      if (error < max_error) return true;
 
-    //   param_.mu /= param_.scale_down;
-    //   if (param_.mu < param_.mu_min) param_.mu = param_.mu_min;
-
-    //   fail_count = 0;
-    //   w = weight_;
-    // }
-
-    // if (fail_count > param_.fail_max) weight_ = w;
-    // else weight_ -= (hessian + param_.mu * Eigen::MatrixXd::Identity(num_weight, num_weight)).inverse() * gradient;
-    weight_ -= (hessian + param_.mu * Eigen::MatrixXd::Identity(num_weight, num_weight)).inverse() * gradient;
-
+      param_.mu /= param_.scale_down;
+      fail_count = 0;
+    }
     last_error = error;
+
+    weight_ -= (hessian + param_.mu * Identity).inverse() * gradient;
+
+    std::cout << error << std::endl;
   }
 
   return false;
@@ -177,21 +196,20 @@ std::vector<double> NBN::run(const std::vector<double> &inputs)
   int num_output = get_num_output();
   int num_pattern = inputs.size() / num_input;
 
-  Eigen::VectorXd output(num_neuron);
+  Eigen::VectorXd output(num_neuron + num_input);
   std::vector<double> ret(num_output * num_pattern);
 
   for (int ind_pattern = 0; ind_pattern < num_pattern; ++ind_pattern) {
     output.head(num_input) = Eigen::Map<const Eigen::VectorXd>(inputs.data() + ind_pattern * num_input,
                                                                num_input);
-
-    for (int i = 0; i < num_neuron - num_input; ++i) {
+    for (int i = 0; i < num_neuron; ++i) {
       const int beg = neuron_index_[i],
                 end = neuron_index_[i + 1],
-                cur = topology_[beg];
+                cur = topology_[beg] - num_input;
       double net = weight_[beg];
       for (int j = beg + 1; j < end; ++j)
         net += weight_[j] * output[topology_[j]];
-      output[cur] = CALL_MEMBER_FUNC(this, activation_func_[activation_[cur]])(net, gain_[cur]);
+      output[cur + num_input] = CALL_MEMBER_FUNC(this, activation_func_[activation_[cur]])(net, gain_[cur]);
     }
 
     for (int i = 0, offset = ind_pattern * num_output; i < num_output; ++i)

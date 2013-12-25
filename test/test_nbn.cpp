@@ -201,9 +201,8 @@ TEST_F(NbnTopologyTest03, get_layer_size)
 
 class NbnCoreTest : public ::testing::Test {
  protected:
-  static void SetUpTestCase() {
+  virtual void SetUp() {
     const std::vector<int> topology = {
-      2, 1,
       3, 1, 2,
       4, 1, 2, 3};
     const std::vector<int> outputs = {4};
@@ -216,21 +215,9 @@ class NbnCoreTest : public ::testing::Test {
 
 NBN NbnCoreTest::nbn;
 
-// TEST_F(NbnCoreTest, run)
-// {
-//   const std::vector<double> inputs = {-5, -3, -1, 1, 3, 5};
-//   std::vector<double> output = nbn.run(inputs);
-//   for (unsigned i = 0; i < output.size(); ++i)
-//     std::cout << output[i] << ' ';
-//   std::cout << std::endl;
-// }
-
-TEST_F(NbnCoreTest, train)
+TEST_F(NbnCoreTest, run)
 {
-  const std::vector<double> inputs = {-5.};
-  const std::vector<double> outputs = {-1.};
-  nbn.train(inputs, outputs, 1, 0.001);
-
+  const std::vector<double> inputs = {-5, -3, -1, 1, 3, 5};
   std::vector<double> output = nbn.run(inputs);
   for (unsigned i = 0; i < output.size(); ++i)
     std::cout << output[i] << ' ';
@@ -239,8 +226,8 @@ TEST_F(NbnCoreTest, train)
 
 // TEST_F(NbnCoreTest, train)
 // {
-//   const std::vector<double> inputs = {-5., -3., -1., 1., 3., 5.};
-//   const std::vector<double> outputs = {-1., 1., -1., 1., -1., 1.};
+//   const std::vector<double> inputs = {-5.};
+//   const std::vector<double> outputs = {-1.};
 //   nbn.train(inputs, outputs, 1, 0.001);
 
 //   std::vector<double> output = nbn.run(inputs);
@@ -249,31 +236,67 @@ TEST_F(NbnCoreTest, train)
 //   std::cout << std::endl;
 // }
 
+TEST_F(NbnCoreTest, train)
+{
+  const std::vector<double> inputs = {-1, -1, -1, 1, 1, -1, 1, 1};
+  const std::vector<double> outputs = {-1, 1, 1, -1};
+  nbn.train(inputs, outputs, 100, 0.001);
 
-// int bisearch_ge(int key, const int *arr, int size) {
-//   int low = 0, high = size - 1;
-//   if (key > arr[high]) return size;
-//   while (low < high) {
-//     int mid = (low + high) / 2;
-//     if (arr[mid] >= key) high = mid;
-//     else low = mid + 1;
-//   }
-//   return high;
-// }
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
 
-// TEST(foo, bisearch_ge)
-// {
-//   std::vector<int> arr = {1, 3, 5, 7, 9};
+int bisearch_ge(int key, const int *arr, int size) {
+  int low = 0, high = size - 1;
+  if (key > arr[high]) return size;
+  while (low < high) {
+    int mid = (low + high) / 2;
+    if (arr[mid] >= key) high = mid;
+    else low = mid + 1;
+  }
+  return high;
+}
 
-//   for (int i = 0; i < 5; ++i)
-//     EXPECT_EQ(i, bisearch_ge(2 * i + 1, arr.data(), 5));
+TEST(bisearch, bisearch_ge)
+{
+  std::vector<int> arr = {1, 3, 5, 7, 9};
 
-//   for (int i = 0; i < 5; ++i)
-//     EXPECT_EQ(i + 1, bisearch_ge(2 * i + 2, arr.data(), 5));
-// }
+  for (int i = 0; i < 5; ++i)
+    EXPECT_EQ(i, bisearch_ge(2 * i + 1, arr.data(), 5));
+
+  for (int i = 0; i < 5; ++i)
+    EXPECT_EQ(i + 1, bisearch_ge(2 * i + 2, arr.data(), 5));
+}
+
+int bisearch_le(int key, const int *arr, int size) {
+  int low = 0, high = size - 1;
+  // only one layer
+  if (low == high) return low;
+  if (key >= arr[high]) return high;
+
+  while (low < high) {
+    int mid = (low + high) / 2;
+    if (arr[mid] > key) high = mid;
+    else low = mid + 1;
+  }
+  return high - 1;
+}
+
+TEST(bisearch, bisearch_le)
+{
+  std::vector<int> arr = {1, 3, 5, 7, 9};
+
+  for (int i = 0; i < 5; ++i)
+    EXPECT_EQ(i, bisearch_le(2 * i + 1, arr.data(), 5));
+
+  for (int i = 0; i < 5; ++i)
+    EXPECT_EQ(i, bisearch_le(2 * i + 2, arr.data(), 5));
+}
 
 int main(int argc, char** argv) {
-  ::testing::GTEST_FLAG(filter) = "NbnTopologyTest*";
+  ::testing::GTEST_FLAG(filter) = "NbnCoreTest.train";
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
