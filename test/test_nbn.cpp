@@ -5,6 +5,11 @@
 
 #include "nbn.h"
 
+/* --------------------------------------------------------------------
+ * set_topology test
+ * --------------------------------------------------------------------
+ */
+
 class NbnTopologyTest00 : public ::testing::Test {
  protected:
   static void SetUpTestCase() {
@@ -55,6 +60,17 @@ TEST_F(NbnTopologyTest00, get_layer_size)
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
+TEST_F(NbnTopologyTest00, get_neuron_layer)
+{
+  EXPECT_EQ(0, nbn.get_neuron_layer(1));
+  EXPECT_EQ(0, nbn.get_neuron_layer(2));
+  EXPECT_EQ(1, nbn.get_neuron_layer(3));
+  EXPECT_EQ(1, nbn.get_neuron_layer(4));
+  EXPECT_EQ(2, nbn.get_neuron_layer(5));
+  EXPECT_EQ(2, nbn.get_neuron_layer(6));
+  EXPECT_EQ(3, nbn.get_neuron_layer(7));
+  EXPECT_EQ(3, nbn.get_neuron_layer(8));
+}
 
 class NbnTopologyTest01 : public ::testing::Test {
  protected:
@@ -100,6 +116,11 @@ TEST_F(NbnTopologyTest01, get_layer_size)
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
+TEST_F(NbnTopologyTest01, get_neuron_layer)
+{
+  EXPECT_EQ(0, nbn.get_neuron_layer(1));
+  EXPECT_EQ(1, nbn.get_neuron_layer(2));
+}
 
 class NbnTopologyTest02 : public ::testing::Test {
  protected:
@@ -146,6 +167,14 @@ TEST_F(NbnTopologyTest02, get_layer_size)
 {
   const std::vector<int> layer_size = {1, 1, 1};
   ASSERT_EQ(layer_size, nbn.get_layer_size());
+}
+
+TEST_F(NbnTopologyTest02, get_neuron_layer)
+{
+  EXPECT_EQ(0, nbn.get_neuron_layer(1));
+  EXPECT_EQ(1, nbn.get_neuron_layer(2));
+  EXPECT_EQ(2, nbn.get_neuron_layer(3));
+  EXPECT_EQ(3, nbn.get_neuron_layer(4));
 }
 
 class NbnTopologyTest03 : public ::testing::Test {
@@ -199,54 +228,23 @@ TEST_F(NbnTopologyTest03, get_layer_size)
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
-class NbnCoreTest : public ::testing::Test {
- protected:
-  virtual void SetUp() {
-    const std::vector<int> topology = {
-      3, 1, 2,
-      4, 1, 2, 3};
-    const std::vector<int> outputs = {4};
-    nbn.set_topology(topology, outputs);
-    nbn.init_default();
-  }
-
-  static NBN nbn;
-};
-
-NBN NbnCoreTest::nbn;
-
-TEST_F(NbnCoreTest, run)
+TEST_F(NbnTopologyTest03, get_neuron_layer)
 {
-  const std::vector<double> inputs = {-5, -3, -1, 1, 3, 5};
-  std::vector<double> output = nbn.run(inputs);
-  for (unsigned i = 0; i < output.size(); ++i)
-    std::cout << output[i] << ' ';
-  std::cout << std::endl;
+  EXPECT_EQ(0, nbn.get_neuron_layer(1));
+  EXPECT_EQ(0, nbn.get_neuron_layer(2));
+  EXPECT_EQ(1, nbn.get_neuron_layer(3));
+  EXPECT_EQ(1, nbn.get_neuron_layer(4));
+  EXPECT_EQ(1, nbn.get_neuron_layer(5));
+  EXPECT_EQ(2, nbn.get_neuron_layer(6));
+  EXPECT_EQ(2, nbn.get_neuron_layer(7));
+  EXPECT_EQ(2, nbn.get_neuron_layer(8));
+  EXPECT_EQ(3, nbn.get_neuron_layer(9));
 }
 
-// TEST_F(NbnCoreTest, train)
-// {
-//   const std::vector<double> inputs = {-5.};
-//   const std::vector<double> outputs = {-1.};
-//   nbn.train(inputs, outputs, 1, 0.001);
-
-//   std::vector<double> output = nbn.run(inputs);
-//   for (unsigned i = 0; i < output.size(); ++i)
-//     std::cout << output[i] << ' ';
-//   std::cout << std::endl;
-// }
-
-TEST_F(NbnCoreTest, train)
-{
-  const std::vector<double> inputs = {-1, -1, -1, 1, 1, -1, 1, 1};
-  const std::vector<double> outputs = {-1, 1, 1, -1};
-  nbn.train(inputs, outputs, 100, 0.001);
-
-  std::vector<double> output = nbn.run(inputs);
-  for (unsigned i = 0; i < output.size(); ++i)
-    std::cout << output[i] << ' ';
-  std::cout << std::endl;
-}
+/* --------------------------------------------------------------------
+ * binary search test
+ * --------------------------------------------------------------------
+ */
 
 int bisearch_ge(int key, const int *arr, int size) {
   int low = 0, high = size - 1;
@@ -295,8 +293,137 @@ TEST(bisearch, bisearch_le)
     EXPECT_EQ(i, bisearch_le(2 * i + 2, arr.data(), 5));
 }
 
+/* --------------------------------------------------------------------
+ * training test
+ * --------------------------------------------------------------------
+ */
+
+TEST(NbnTrainingTest, parity3)
+{
+  const std::vector<int> topology = {
+    2, 1,
+    3, 1, 2,
+    4, 1, 2, 3};
+  const std::vector<int> out = {4};
+  const std::vector<double> inputs = {-3., -1., 1., 3.};
+  const std::vector<double> outputs = {-1., 1., -1., 1.};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 100, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
+TEST(NbnTrainingTest, parity5)
+{
+  const std::vector<int> topology = {
+    2, 1,
+    3, 1, 2,
+    4, 1, 2, 3};
+  const std::vector<int> out = {4};
+  const std::vector<double> inputs = {-5., -3., -1., 1., 3., 5.};
+  const std::vector<double> outputs = {-1., 1., -1., 1., -1., 1.};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 10, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
+TEST(NbnTrainingTest, parity7)
+{
+  const std::vector<int> topology = {
+    2, 1,
+    3, 1, 2,
+    4, 1, 2, 3,
+    5, 1, 2, 3, 4};
+  const std::vector<int> out = {5};
+  const std::vector<double> inputs = {-7., -5., -3., -1., 1., 3., 5., 7.};
+  const std::vector<double> outputs = {-1., 1., -1., 1., -1., 1., -1., 1.};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 10, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
+TEST(NbnTrainingTest, logic_xor)
+{
+  const std::vector<int> topology = {
+    3, 1, 2,
+    4, 1, 2, 3};
+  const std::vector<int> out = {4};
+  const std::vector<double> inputs = {-1, -1, -1, 1, 1, -1, 1, 1};
+  const std::vector<double> outputs = {-1, 1, 1, -1};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 50, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
+TEST(NbnTrainingTest, logic_and)
+{
+  const std::vector<int> topology = {
+    3, 1, 2,
+    4, 1, 2, 3};
+  const std::vector<int> out = {4};
+  const std::vector<double> inputs = {-1, -1, -1, 1, 1, -1, 1, 1};
+  const std::vector<double> outputs = {-1, -1, -1, 1};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 50, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
+TEST(NbnTrainingTest, logic_or)
+{
+  const std::vector<int> topology = {
+    3, 1, 2,
+    4, 1, 2, 3};
+  const std::vector<int> out = {4};
+  const std::vector<double> inputs = {-1, -1, -1, 1, 1, -1, 1, 1};
+  const std::vector<double> outputs = {-1, 1, 1, 1};
+
+  NBN nbn;
+  nbn.set_topology(topology, out);
+  nbn.init_default();
+  nbn.train(inputs, outputs, 50, 0.001);
+
+  std::vector<double> output = nbn.run(inputs);
+  for (unsigned i = 0; i < output.size(); ++i)
+    std::cout << output[i] << ' ';
+  std::cout << std::endl;
+}
+
 int main(int argc, char** argv) {
-  ::testing::GTEST_FLAG(filter) = "NbnCoreTest.train";
+  ::testing::GTEST_FLAG(filter) = "NbnTrainingTest.logic*";
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -21,6 +21,7 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   layer_index_.clear();
 
   neuron_index_.push_back(0);
+  layer_index_.push_back(0);
   layer_index_.push_back(topology_[0]);
   int size = topology_.size();
   for (int i = 1, updated = 0; i < size; ++i) {
@@ -103,30 +104,27 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       for (int i = 0; i < num_neuron; ++i) {
         const int beg = neuron_index_[i],     // start postion for current neuron in topology_
                   end = neuron_index_[i + 1], // past-the-end position for current neuron in topology_
-                 ind0 = topology_[beg],       // index of current neuron considering input
-                 ind1 = ind0 - num_input;     // index of current neuron without considering input
+                  ind = topology_[beg];       // index of current neuron considering input
 
         // calculate output of current neuron
         double net = weight_[beg];
         for (int j = beg + 1; j < end; ++j)
           net += weight_[j] * output[topology_[j]];
-        output[ind0] = CALL_MEMBER_FUNC(this, activation_func_[activation_[ind1]])(net, gain_[ind1]);
+        output[ind] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
 
-        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[ind1]])
-                            (output[ind0], gain_[ind1]);
+        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[i]])
+                            (output[ind], gain_[i]);
 
-        // Update delta table.  Don't try to change anything here
-        // unless you know what you're doing.
-        delta(ind1, ind1) = derivative;
-        int cur_layer = get_neuron_layer(ind0);
-        for (int j0 = num_input; j0 < layer_index_[cur_layer]; ++j0) {
+        // Update delta table.
+        delta(i, i) = derivative;
+        for (int j0 = num_input; j0 < ind; ++j0) {
           int j1 = j0 - num_input;
-          int layerj = get_neuron_layer(j0);
-          double signal = lookup_(j0, ind0) >= 0 ? weight_[lookup_(j0, ind0)] * delta(j1, j1) : 0.0;
-          for (int k = bisearch_ge(layer_index_[layerj + 1],
-                                   topology_.data() + beg + 1, end - beg) + beg + 1; k < end; ++k)
-            signal += weight_[lookup_(topology_[k], ind0)] * delta(topology_[k] - num_input, j1);
-          delta(ind1, j1) = derivative * signal;
+          double signal = lookup_(j0, ind) >= 0 ? weight_[lookup_(j0, ind)] * delta(j1, j1) : 0.0;
+          for (int k = beg + 1; k < end; ++k) {
+            if (topology_[k] > j0)
+              signal += weight_[lookup_(topology_[k], ind)] * delta(topology_[k] - num_input, j1);
+          }
+          delta(i, j1) = derivative * signal;
         }
       }
 
@@ -134,7 +132,7 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       for (int ind_output = 0; ind_output < num_output; ++ind_output) {
         int i0 = output_id_[ind_output],
             i1 = i0 - num_input,
-        layeri = get_neuron_layer(i0);
+        layeri = get_neuron_layer(i0 + 1);
         double e = desired_outputs[ind_pattern * num_output + ind_output] - output[i0];
         jacobian.setZero();
 
@@ -165,6 +163,8 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       }
     }
 
+    weight_ += (hessian + param_.mu * Identity).inverse() * gradient;
+
     if (error > last_error) {
       ++fail_count;
       // if (fail_count > param_.fail_max) return false;
@@ -175,14 +175,11 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
 
       if (error < max_error) return true;
 
-      param_.mu /= param_.scale_down;
+      param_.mu *= param_.scale_down;
+      if (param_.mu < param_.mu_min) param_.mu = param_.mu_min;
       fail_count = 0;
     }
     last_error = error;
-
-    weight_ -= (hessian + param_.mu * Identity).inverse() * gradient;
-
-    std::cout << error << std::endl;
   }
 
   return false;
@@ -202,14 +199,14 @@ std::vector<double> NBN::run(const std::vector<double> &inputs)
   for (int ind_pattern = 0; ind_pattern < num_pattern; ++ind_pattern) {
     output.head(num_input) = Eigen::Map<const Eigen::VectorXd>(inputs.data() + ind_pattern * num_input,
                                                                num_input);
+
     for (int i = 0; i < num_neuron; ++i) {
       const int beg = neuron_index_[i],
-                end = neuron_index_[i + 1],
-                cur = topology_[beg] - num_input;
+                end = neuron_index_[i + 1];
       double net = weight_[beg];
       for (int j = beg + 1; j < end; ++j)
         net += weight_[j] * output[topology_[j]];
-      output[cur + num_input] = CALL_MEMBER_FUNC(this, activation_func_[activation_[cur]])(net, gain_[cur]);
+      output[i + num_input] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
     }
 
     for (int i = 0, offset = ind_pattern * num_output; i < num_output; ++i)

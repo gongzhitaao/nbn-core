@@ -96,11 +96,11 @@ class NBN
     std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
 
     // for (int i = 0; i < num_output; ++i)
-    //   activation_[output_id_[i]] = NBN_LINEAR;
+    //   activation_[output_id_[i] - num_input] = NBN_LINEAR;
 
     // random initialized weights
     weight_ = Eigen::VectorXd::Random(num_weight);
-    // weight_ = Eigen::VectorXd::Zero(num_weight);
+    // weight_ = Eigen::VectorXd::Ones(num_weight);
 
     // gain will usually be all 1's.
     gain_.resize(num_neuron);
@@ -128,7 +128,7 @@ class NBN
   }
 
   int get_num_layer() const {
-    return layer_index_.size() - 1;
+    return layer_index_.size() - 2;
   }
 
   // Number of weights, *including* the bias
@@ -148,9 +148,14 @@ class NBN
 
   std::vector<int> get_layer_size() const {
     std::vector<int> layer_array;
-    for (unsigned i = 0; i < layer_index_.size() - 1; ++i)
+    for (unsigned i = 1; i < layer_index_.size() - 1; ++i)
       layer_array.push_back(layer_index_[i+1] - layer_index_[i]);
     return layer_array;
+  }
+
+  // Get the layer number the neuron i is in.  Both are 1-based.
+  int get_neuron_layer(int i) const {
+    return bisearch_le(i - 1, layer_index_.data(), get_num_layer() + 1);
   }
 
   bool train(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
@@ -188,8 +193,6 @@ class NBN
 
   int bisearch_le(int key, const int *arr, int size) const {
     int low = 0, high = size - 1;
-    // only one layer
-    if (low == high) return low;
     if (key >= arr[high]) return high;
 
     while (low < high) {
@@ -211,10 +214,10 @@ class NBN
     return high;
   }
 
-  // Get the layer number the neuron i is in.  Both are 0-based.
-  int get_neuron_layer(int i) const {
-    return bisearch_le(i, layer_index_.data(), get_num_layer());
-  }
+  // // Get the layer number the neuron i is in.  Both are 0-based.
+  // int get_neuron_layer(int i) const {
+  //   return bisearch_le(i, layer_index_.data(), get_num_layer());
+  // }
 
   // A long vector that contains the topology of the whole network.
   // Each neuron id is followed by its input.  Assumption is that the
