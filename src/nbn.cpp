@@ -1,65 +1,254 @@
 #include "nbn.h"
 
+#include <algorithm>
+#include <limits>
 #include <iostream>
 
-#define EIGEN_NO_DEBUG
-
-NBN::NBN() :
-  num_input_(0),
-  num_output_(0),
-  num_weight_(0),
-  train_func_{&NBN::ebp, &NBN::nbn}
+void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
 {
-}
+  // Topology in config files are 1-based, while in program, 0-based
+  // are more convenient.
+  topology_.resize(topology.size());
+  std::transform(topology.begin(), topology.end(), topology_.begin(),
+                 [](int i) -> int { return i - 1; });
 
-NBN::~NBN()
-{
-}
+  // 1-based to 0-based
+  output_id_.resize(output.size());
+  std::transform(output.begin(), output.end(), output_id_.begin(),
+                 [](int i) -> int { return i - 1; });
 
-#define CALL_MEMBER_FUNC(object, func_ptr) ((object).*(func_ptr))
-
-void NBN::set_topology(const nbn_index_t &topology)
-{
-  topology_ = topology;
   neuron_index_.clear();
   layer_index_.clear();
 
-  neuron_index_.push_back(num_input_);
+  neuron_index_.push_back(0);
+  layer_index_.push_back(0);
   layer_index_.push_back(topology_[0]);
   int size = topology_.size();
-  for (int i = 1,
-	 max_last_layer_neuron_id = 2,
-	 updated = 0;
-       i < size; ++i) {
-    if (topology_[i] > topology_[neuron_index_.back() - num_input_]) {
-      neuron_index_.push_back(i + num_input_);
+  for (int i = 1, updated = 0; i < size; ++i) {
+    if (topology_[i] > topology_[neuron_index_.back()]) {
+      // sort inputs to each neuron ascendingly
+      std::sort(&topology_[neuron_index_.back() + 1], &topology_[i]);
+      neuron_index_.push_back(i);
       updated = 0;
-    } else if (topology_[i] > max_last_layer_neuron_id && !updated) {
-      max_last_layer_neuron_id = topology_[neuron_index_[neuron_index_.size() - 2] - num_input_];
-      layer_index_.push_back(topology_[neuron_index_.back() - num_input_]);
+    } else if (topology_[i] >= layer_index_.back() && !updated) {
+      layer_index_.push_back(topology_[neuron_index_.back()]);
       updated = 1;
     }
   }
+  // sort last neuron inputs
+  std::sort(topology_.begin() + neuron_index_.back() + 1, topology_.end());
 
-  num_input_ = topology_[0] - 1;
-  num_output_ = topology_[neuron_index_.back()] - layer_index_.back() + 1;
-  num_weight_ = size - neuron_index_.size();
+  // // both for convinience
+  neuron_index_.push_back(size);
 
-  neuron_index_.push_back(size); // for convinience
+  int num_input = get_num_input();
+  layer_index_.push_back(get_num_neuron() + num_input);
+
+  // update index in lookup table
+  int num_neuron = get_num_neuron();
+  lookup_ = -1 * Eigen::MatrixXi::Ones(num_neuron + num_input, num_neuron + num_input);
+  for (int i = 0, j = 0; i < size; ++i) {
+    int neuron = topology_[i];
+    if (neuron > j) j = neuron;
+    lookup_(neuron, j) = i;
+  }
 }
 
-bool NBN::train(std::vector<double> inputs, std::vector<double> desired_outputs,
-		int max_iteration, double max_error)
-{
-  return CALL_MEMBER_FUNC(*this, train_func_[training_algorithm_])(max_iteration, max_error);
-}
-
-bool NBN::nbn(int max_iteration, double max_error)
+bool NBN::mlp_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
 {
   return true;
 }
 
-bool NBN::ebp(int max_iteration, double max_error)
+bool NBN::mlp_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
 {
   return true;
+}
+
+bool NBN::acn_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
+{
+  return true;
+}
+
+bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
+{
+  int num_input = get_num_input();
+  int num_output = get_num_output();
+  int num_neuron = get_num_neuron();
+  int num_weight = get_num_weight();
+  int num_pattern = inputs.size() / num_input;
+
+  Eigen::MatrixXd hessian(num_weight, num_weight);
+  Eigen::MatrixXd Identity = Eigen::MatrixXd::Identity(num_weight, num_weight);
+
+  // Same structure as topology_, so neuron_index_ applies here.
+  Eigen::RowVectorXd jacobian(num_weight);
+  Eigen::VectorXd gradient(num_weight);
+
+  // Contains output for each neuron, including input
+  Eigen::VectorXd output(num_neuron + num_input);
+
+  // Stores the signal gain for backward computation.
+  Eigen::MatrixXd delta(num_neuron, num_neuron);
+
+  Eigen::VectorXd weight_backup(num_weight);
+
+  double last_error = std::numeric_limits<double>::max();
+  int fail_count = 0;
+
+  for (int iteration = 0; iteration < max_iteration; ++iteration) {
+
+    double error = 0.0;
+    hessian.setZero();
+    gradient.setZero();
+
+    for (int ind_pattern = 0; ind_pattern < num_pattern; ++ind_pattern) {
+
+      delta.setZero();
+      output.setZero();
+
+      // output of the input neurons
+      output.head(num_input) = Eigen::Map<const Eigen::VectorXd>(inputs.data() + ind_pattern * num_input,
+                                                                 num_input);
+
+      // Forward computation.
+      for (int i = 0; i < num_neuron; ++i) {
+        const int beg = neuron_index_[i],     // start postion for current neuron in topology_
+                  end = neuron_index_[i + 1], // past-the-end position for current neuron in topology_
+                  ind = topology_[beg];       // index of current neuron considering input
+
+        // calculate output of current neuron
+        double net = weight_[beg];
+        for (int j = beg + 1; j < end; ++j)
+          net += weight_[j] * output[topology_[j]];
+        output[ind] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
+
+        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[i]])
+                            (output[ind], gain_[i]);
+
+        // Update delta table.
+        delta(i, i) = derivative;
+        for (int j0 = num_input; j0 < ind; ++j0) {
+          int j1 = j0 - num_input;
+          double signal = lookup_(j0, ind) >= 0 ? weight_[lookup_(j0, ind)] * delta(j1, j1) : 0.0;
+          for (int k = beg + 1; k < end; ++k) {
+            if (topology_[k] > j0)
+              signal += weight_[lookup_(topology_[k], ind)] * delta(topology_[k] - num_input, j1);
+          }
+          delta(i, j1) = derivative * signal;
+        }
+      }
+
+      // Backward propagation
+      for (int ind_output = 0; ind_output < num_output; ++ind_output) {
+        int i0 = output_id_[ind_output],
+            i1 = i0 - num_input,
+        layeri = get_neuron_layer(i0 + 1);
+        double e = desired_outputs[ind_pattern * num_output + ind_output] - output[i0];
+        jacobian.setZero();
+
+        // Update jacobian for neurons in previous layers
+        for (int j = 0; j < layer_index_[layeri] - num_input; ++j) {
+          const int beg = neuron_index_[j],     // start postion for current neuron in topology_
+                    end = neuron_index_[j + 1]; // past-the-end position for current neuron in topology_
+
+          jacobian[beg] = delta(i1, j);
+          for (int k = beg + 1; k < end; ++k)
+            jacobian[k] = output[topology_[k]] * delta(i1, j);
+        }
+
+        // Update jacobian for inputs to the current output.  This is
+        // neccessary because we might have outputs from hidden
+        // neurons.
+        const int beg = neuron_index_[i1],
+                  end = neuron_index_[i1 + 1],
+                 ind1 = topology_[beg] - num_input;
+
+        jacobian[beg] = delta(i1, ind1);
+        for (int k = beg + 1; k < end; ++k)
+          jacobian[k] = output[topology_[k]] * delta(i1, ind1);
+
+        gradient += jacobian.transpose() * e;
+        hessian += jacobian.transpose() * jacobian;
+        error += e * e;
+      }
+    }
+
+    weight_backup = weight_;
+    int fail_count = 0;
+    while (true) {
+      // update weight
+      Eigen::VectorXd dw = (hessian + param_.mu * Identity).inverse() * gradient;
+      weight_ = weight_backup + dw;
+
+      // calculate error again
+      std::vector<double> tmp_output = run_acn(inputs);
+      error = 0.0;
+      for (int i = 0; i < num_pattern; ++i) {
+        double e = 0.0;
+        for (int j = 0; j < num_output; ++j)
+          e += desired_outputs[i * num_output + j] - tmp_output[i * num_output + j];
+        error += e * e;
+      }
+
+      if (error < last_error) {
+        if (param_.mu > param_.mu_min)
+          param_.mu *= param_.scale_down;
+        last_error = error;
+        break;
+      } else {
+        ++fail_count;
+        if (fail_count > param_.fail_max) {
+          last_error = error;
+          break;
+        }
+        if (param_.mu < param_.mu_max)
+          param_.mu *= param_.scale_up;
+      }
+    }
+
+    if (error < max_error)
+      break;
+  }
+
+  return false;
+}
+
+std::vector<double> NBN::run_mlp(const std::vector<double> &inputs) const
+{
+  return std::vector<double>();
+}
+
+std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
+{
+  int num_input = get_num_input();
+  int num_neuron = get_num_neuron();
+  int num_weight = get_num_weight();
+  int num_output = get_num_output();
+  int num_pattern = inputs.size() / num_input;
+
+  Eigen::VectorXd output(num_neuron + num_input);
+  std::vector<double> ret(num_output * num_pattern);
+
+  for (int ind_pattern = 0; ind_pattern < num_pattern; ++ind_pattern) {
+    output.head(num_input) = Eigen::Map<const Eigen::VectorXd>(inputs.data() + ind_pattern * num_input,
+                                                               num_input);
+
+    for (int i = 0; i < num_neuron; ++i) {
+      const int beg = neuron_index_[i],
+                end = neuron_index_[i + 1];
+      double net = weight_[beg];
+      for (int j = beg + 1; j < end; ++j)
+        net += weight_[j] * output[topology_[j]];
+      output[i + num_input] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
+    }
+
+    for (int i = 0, offset = ind_pattern * num_output; i < num_output; ++i)
+      ret[i + offset] = output[output_id_[i]];
+  }
+
+  return ret;
 }
