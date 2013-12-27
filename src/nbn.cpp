@@ -54,13 +54,25 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   }
 }
 
-bool NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool NBN::mlp_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
   return true;
 }
 
-bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool NBN::mlp_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
+{
+  return true;
+}
+
+bool NBN::acn_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+              int max_iteration, double max_error)
+{
+  return true;
+}
+
+bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
   int num_input = get_num_input();
@@ -81,6 +93,8 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
 
   // Stores the signal gain for backward computation.
   Eigen::MatrixXd delta(num_neuron, num_neuron);
+
+  Eigen::VectorXd weight_backup(num_weight);
 
   double last_error = std::numeric_limits<double>::max();
   int fail_count = 0;
@@ -163,29 +177,52 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
       }
     }
 
-    weight_ += (hessian + param_.mu * Identity).inverse() * gradient;
+    weight_backup = weight_;
+    int fail_count = 0;
+    while (true) {
+      // update weight
+      Eigen::VectorXd dw = (hessian + param_.mu * Identity).inverse() * gradient;
+      weight_ = weight_backup + dw;
 
-    if (error > last_error) {
-      ++fail_count;
-      // if (fail_count > param_.fail_max) return false;
+      // calculate error again
+      std::vector<double> tmp_output = run_acn(inputs);
+      error = 0.0;
+      for (int i = 0; i < num_pattern; ++i) {
+        double e = 0.0;
+        for (int j = 0; j < num_output; ++j)
+          e += desired_outputs[i * num_output + j] - tmp_output[i * num_output + j];
+        error += e * e;
+      }
 
-      param_.mu *= param_.scale_up;
-      if (param_.mu > param_.mu_max) param_.mu = param_.mu_max;
-    } else {
-
-      if (error < max_error) return true;
-
-      param_.mu *= param_.scale_down;
-      if (param_.mu < param_.mu_min) param_.mu = param_.mu_min;
-      fail_count = 0;
+      if (error < last_error) {
+        if (param_.mu > param_.mu_min)
+          param_.mu *= param_.scale_down;
+        last_error = error;
+        break;
+      } else {
+        ++fail_count;
+        if (fail_count > param_.fail_max) {
+          last_error = error;
+          break;
+        }
+        if (param_.mu < param_.mu_max)
+          param_.mu *= param_.scale_up;
+      }
     }
-    last_error = error;
+
+    if (error < max_error)
+      break;
   }
 
   return false;
 }
 
-std::vector<double> NBN::run(const std::vector<double> &inputs)
+std::vector<double> NBN::run_mlp(const std::vector<double> &inputs) const
+{
+  return std::vector<double>();
+}
+
+std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
 {
   int num_input = get_num_input();
   int num_neuron = get_num_neuron();

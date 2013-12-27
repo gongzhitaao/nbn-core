@@ -11,16 +11,22 @@ class NBN
 {
 #define CALL_MEMBER_FUNC(object_ptr, func_ptr) ((object_ptr)->*(func_ptr))
 
-  typedef bool (NBN::*nbn_train_func_t) (const std::vector<double> &, const std::vector<double> &,
-                                         int, double);
-  typedef double (NBN::*nbn_activation_func_t) (double, double);
+  typedef double (NBN::*nbn_activation_func_t) (double, double) const;
+  typedef bool (NBN::*nbn_train_func_t) (const std::vector<double> &, const std::vector<double> &, int, double);
+  typedef std::vector<double> (NBN::*nbn_run_func_t) (const std::vector<double> &) const;
 
  public:
 
   enum nbn_train_enum {
-    NBN_EBP = 0,		// standard error-backpropagation
-    NBN_NBN,			// NBN algorithm
+    NBN_EBP = 0,  // standard error-backpropagation
+    NBN_NBN,      // NBN(revised LM) algorithm
     NBN_TRAIN_ENUM
+  };
+
+  enum nbn_topology_enum {
+    NBN_MLP = 0,  // multilayer perceptron
+    NBN_ACN,      // arbitrary connected network, including bridged-MLP and FCC
+    NBN_TOPOLOGY_ENUM
   };
 
   enum nbn_activation_func_enum {
@@ -43,7 +49,8 @@ class NBN
   NBN()
       : activation_func_{&NBN::linear, &NBN::threshold, &NBN::threshold_s, &NBN::sigmoid, &NBN::tanh}
       , activation_func_d_{&NBN::linear_d, &NBN::threshold, &NBN::threshold_s, &NBN::sigmoid_d, &NBN::tanh_d}
-      , train_func_{&NBN::ebp, &NBN::nbn} {}
+      , train_func_{{&NBN::mlp_ebp, &NBN::mlp_nbn}, {&NBN::acn_ebp, &NBN::acn_nbn}}
+      , run_func_{&NBN::run_mlp, &NBN::run_acn} {}
   ~NBN() {}
 
   bool set_training_algorithm(nbn_train_enum training_algorithm);
@@ -99,8 +106,8 @@ class NBN
     //   activation_[output_id_[i] - num_input] = NBN_LINEAR;
 
     // random initialized weights
-    weight_ = Eigen::VectorXd::Random(num_weight);
-    // weight_ = Eigen::VectorXd::Ones(num_weight);
+    // weight_ = Eigen::VectorXd::Random(num_weight);
+    weight_ = Eigen::VectorXd::Ones(num_weight);
 
     // gain will usually be all 1's.
     gain_.resize(num_neuron);
@@ -112,10 +119,12 @@ class NBN
     param_.mu_max = 1e15;
     param_.scale_up = 10;
     param_.scale_down = 0.1;
-    param_.fail_max = 10;
+    param_.fail_max = 5;
 
     // default using NBN algorithm
     training_algorithm_ = NBN_NBN;
+
+    topology_type_ = NBN_ACN;
   }
 
   int get_num_input() const {
@@ -160,11 +169,13 @@ class NBN
 
   bool train(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
              int max_iteration, double max_error) {
-    return CALL_MEMBER_FUNC(this, train_func_[training_algorithm_])(
+    return CALL_MEMBER_FUNC(this, train_func_[topology_type_][training_algorithm_])(
         inputs, desired_outputs, max_iteration, max_error);
   }
 
-  std::vector<double> run(const std::vector<double> &inputs);
+  std::vector<double> run(const std::vector<double> &inputs) const {
+    return CALL_MEMBER_FUNC(this, run_func_[topology_type_])(inputs);
+  }
 
  private:
 
@@ -172,24 +183,31 @@ class NBN
   // symmetric version of func.  And note for sigmoid and tanh, the
   // derivative is based on output of sigmoid and tanh respectively.
 
-  double linear(double x, double k) { return k * x; }
-  double linear_d(double x, double k) { return k; }
+  double linear(double x, double k) const { return k * x; }
+  double linear_d(double x, double k) const { return k; }
 
   // They are not supposed to be used for training, so no derivatives
   // are defined here.
-  double threshold(double x, double k) { return x < 0 ? 0 : 1; }
-  double threshold_s(double x, double k) { return x < 0 ? -1 : 1; }
+  double threshold(double x, double k) const { return x < 0 ? 0 : 1; }
+  double threshold_s(double x, double k) const { return x < 0 ? -1 : 1; }
 
-  double sigmoid(double x, double k) { return 1 / (1 + std::exp(-k * x)); }
-  double sigmoid_d(double y, double k) { return k * y * (1 - y); }
+  double sigmoid(double x, double k) const { return 1 / (1 + std::exp(-k * x)); }
+  double sigmoid_d(double y, double k) const { return k * y * (1 - y); }
 
-  double tanh(double x, double k) { return std::tanh(k * x); }
-  double tanh_d(double y, double k) { return k * (1 - y * y); }
+  double tanh(double x, double k) const { return std::tanh(k * x); }
+  double tanh_d(double y, double k) const { return k * (1 - y * y); }
 
-  bool ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
-           int max_iteration, double max_error);
-  bool nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
-           int max_iteration, double max_error);
+  bool mlp_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+               int max_iteration, double max_error);
+  bool mlp_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+               int max_iteration, double max_error);
+  bool acn_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+               int max_iteration, double max_error);
+  bool acn_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+               int max_iteration, double max_error);
+
+  std::vector<double> run_mlp(const std::vector<double> &inputs) const;
+  std::vector<double> run_acn(const std::vector<double> &inputs) const;
 
   int bisearch_le(int key, const int *arr, int size) const {
     int low = 0, high = size - 1;
@@ -261,7 +279,10 @@ class NBN
   const nbn_activation_func_t activation_func_d_[NBN_ACTIVATION_ENUM];
 
   nbn_train_enum training_algorithm_;
-  const nbn_train_func_t train_func_[NBN_TRAIN_ENUM];
+  nbn_topology_enum topology_type_;
+
+  const nbn_train_func_t train_func_[NBN_TOPOLOGY_ENUM][NBN_TRAIN_ENUM];
+  const nbn_run_func_t run_func_[NBN_TOPOLOGY_ENUM];
 };
 
 #endif	// NBN_H_

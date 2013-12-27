@@ -332,7 +332,7 @@ TEST(NbnTrainingTest, parity5)
   NBN nbn;
   nbn.set_topology(topology, out);
   nbn.init_default();
-  nbn.train(inputs, outputs, 10, 0.001);
+  nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
   for (unsigned i = 0; i < output.size(); ++i)
@@ -354,7 +354,7 @@ TEST(NbnTrainingTest, parity7)
   NBN nbn;
   nbn.set_topology(topology, out);
   nbn.init_default();
-  nbn.train(inputs, outputs, 10, 0.001);
+  nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
   for (unsigned i = 0; i < output.size(); ++i)
@@ -423,7 +423,7 @@ TEST(NbnTrainingTest, logic_or)
 }
 
 int main(int argc, char** argv) {
-  ::testing::GTEST_FLAG(filter) = "NbnTrainingTest.logic*";
+  ::testing::GTEST_FLAG(filter) = "NbnTrainingTest.parity5";
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
