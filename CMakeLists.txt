@@ -1,11 +1,12 @@
 cmake_minimum_required (VERSION 2.8)
 
-project (nbn)
+project (nbn-core)
 
-option(build_test "Build all of NBN's unit tests." ON)
+option(build_test "Build all of NBN's unit tests (GTest required.)." ON)
 
 include_directories(/usr/include/eigen3)
-set(CMAKE_CXX_FLAGS "${cmake_cxx_flags} -O3 -std=c++11 -fopenmp")
+<<<<<<< Updated upstream
+set(CMAKE_CXX_FLAGS "${cmake_cxx_flags} -Wall -O3 -std=c++11 -fopenmp")
 
 add_subdirectory(src)
 

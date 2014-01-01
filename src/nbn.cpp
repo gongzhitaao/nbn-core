@@ -12,11 +12,6 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   std::transform(topology.begin(), topology.end(), topology_.begin(),
                  [](int i) -> int { return i - 1; });
 
-  // 1-based to 0-based
-  output_id_.resize(output.size());
-  std::transform(output.begin(), output.end(), output_id_.begin(),
-                 [](int i) -> int { return i - 1; });
-
   neuron_index_.clear();
   layer_index_.clear();
 
@@ -42,10 +37,32 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   neuron_index_.push_back(size);
 
   int num_input = get_num_input();
+  int num_neuron = get_num_neuron();
+
+  if (output.size() > 0) {
+      // 1-based to 0-based
+      output_id_.resize(output.size());
+      std::transform(output.begin(), output.end(), output_id_.begin(),
+                     [](int i) { return i - 1; });
+  } else {
+      for (int i = layer_index_.back(); i < num_neuron + num_input; ++i)
+          output_id_.push_back(i);
+  }
+
   layer_index_.push_back(get_num_neuron() + num_input);
 
+  if (output.size() > 0) {
+      // 1-based to 0-based
+      output_id_.resize(output.size());
+      std::transform(output.begin(), output.end(), output_id_.begin(),
+                     [](int i) { return i - 1; });
+  } else {
+      int num_neuron = get_num_neuron();
+      for (int i = layer_index_.back(); i < num_neuron + num_input; ++i)
+          output_id_.push_back(i);
+  }
+
   // update index in lookup table
-  int num_neuron = get_num_neuron();
   lookup_ = -1 * Eigen::MatrixXi::Ones(num_neuron + num_input, num_neuron + num_input);
   for (int i = 0, j = 0; i < size; ++i) {
     int neuron = topology_[i];
@@ -96,8 +113,8 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
 
   Eigen::VectorXd weight_backup(num_weight);
 
-  double last_error = std::numeric_limits<double>::max();
-  int fail_count = 0;
+  errors_.clear();
+  errors_.push_back(calc_e)
 
   for (int iteration = 0; iteration < max_iteration; ++iteration) {
 
@@ -173,7 +190,6 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
 
         gradient += jacobian.transpose() * e;
         hessian += jacobian.transpose() * jacobian;
-        error += e * e;
       }
     }
 
@@ -181,8 +197,7 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
     int fail_count = 0;
     while (true) {
       // update weight
-      Eigen::VectorXd dw = (hessian + param_.mu * Identity).inverse() * gradient;
-      weight_ = weight_backup + dw;
+      weight_ = weight_backup + (hessian + param_.mu * Identity).inverse() * gradient;
 
       // calculate error again
       std::vector<double> tmp_output = run_acn(inputs);
@@ -214,6 +229,9 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
       break;
   }
 
+  weightcopy_.clear();
+  weightcopy_.insert(weightcopy_.end(), weight_.data(), weight_.data() + weight_.size());
+
   return false;
 }
 
@@ -226,7 +244,6 @@ std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
 {
   int num_input = get_num_input();
   int num_neuron = get_num_neuron();
-  int num_weight = get_num_weight();
   int num_output = get_num_output();
   int num_pattern = inputs.size() / num_input;
 

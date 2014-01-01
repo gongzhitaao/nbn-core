@@ -55,23 +55,27 @@ class NBN
 
   bool set_training_algorithm(nbn_train_enum training_algorithm);
 
-  nbn_train_enum get_training_algorithm() const {
-    return training_algorithm_;
-  }
+  nbn_train_enum get_training_algorithm() const { return training_algorithm_; }
 
+<<<<<<< Updated upstream
   void set_topology(const std::vector<int> &topology, const std::vector<int> &output);
+  const std::vector<int> &get_topology() const { return topology_; }
+=======
+  void set_topology(const std::vector<int> &topology,
+                    const std::vector<int> &output = std::vector<int>());
+>>>>>>> Stashed changes
 
-  void set_gains(const std::vector<double> &gains) {
-    gain_ = gains;
-  }
+  void set_gains(const std::vector<double> &gains) { gain_ = gains; }
+  const std::vector<double> &get_gains() const { return gain_; }
 
-  void set_activations(const std::vector<nbn_activation_func_enum> &activations) {
-    std::copy(activations.begin(), activations.end(), activation_.begin() + get_num_input());
-  }
+  void set_weight(const std::vector<double> &weight) { weight_ = Eigen::Map<const Eigen::VectorXd>(weight.data(),weight.size()); }
+  const std::vector<double> &get_weight() const { return weightcopy_; }
 
-  void set_algorithm(nbn_train_enum training_algorithm) {
-    training_algorithm_ = training_algorithm;
-  }
+  void set_activations(const std::vector<nbn_activation_func_enum> &activations) { activation_ = activations; }
+  const std::vector<nbn_activation_func_enum> &get_activations() const { return activation_; }
+
+  void set_algorithm(nbn_train_enum training_algorithm) { training_algorithm_ = training_algorithm; }
+  nbn_train_enum get_algorithm() const { return training_algorithm_; }
 
   void set_learning_const(double alpha) { param_.alpha = alpha; }
   double get_learning_const() const { return param_.alpha; }
@@ -92,21 +96,14 @@ class NBN
   double get_scale_down() const { return param_.scale_down; }
 
   void init_default() {
-    int num_input = get_num_input();
-    int num_output = get_num_output();
     int num_weight = get_num_weight();
     int num_neuron = get_num_neuron();
 
-    // default activation, linear for input and output, sigmoid for
-    // hidden layers
+    // default activation, bipolar
     activation_.resize(num_neuron);
     std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
 
-    // for (int i = 0; i < num_output; ++i)
-    //   activation_[output_id_[i] - num_input] = NBN_LINEAR;
-
     // random initialized weights
-    // weight_ = Eigen::VectorXd::Random(num_weight);
     weight_ = Eigen::VectorXd::Ones(num_weight);
 
     // gain will usually be all 1's.
@@ -119,7 +116,7 @@ class NBN
     param_.mu_max = 1e15;
     param_.scale_up = 10;
     param_.scale_down = 0.1;
-    param_.fail_max = 5;
+    param_.fail_max = 10;
 
     // default using NBN algorithm
     training_algorithm_ = NBN_NBN;
@@ -184,12 +181,12 @@ class NBN
   // derivative is based on output of sigmoid and tanh respectively.
 
   double linear(double x, double k) const { return k * x; }
-  double linear_d(double x, double k) const { return k; }
+  double linear_d(double /* x */, double k) const { return k; }
 
   // They are not supposed to be used for training, so no derivatives
   // are defined here.
-  double threshold(double x, double k) const { return x < 0 ? 0 : 1; }
-  double threshold_s(double x, double k) const { return x < 0 ? -1 : 1; }
+  double threshold(double x, double /* k */) const { return x < 0 ? 0 : 1; }
+  double threshold_s(double x, double /* k */) const { return x < 0 ? -1 : 1; }
 
   double sigmoid(double x, double k) const { return 1 / (1 + std::exp(-k * x)); }
   double sigmoid_d(double y, double k) const { return k * y * (1 - y); }
@@ -232,10 +229,19 @@ class NBN
     return high;
   }
 
-  // // Get the layer number the neuron i is in.  Both are 0-based.
-  // int get_neuron_layer(int i) const {
-  //   return bisearch_le(i, layer_index_.data(), get_num_layer());
-  // }
+  double calcerror(const std::vector<double> desired_outputs, const std::vector<double outputs) {
+    int num_output = get_num_output();
+    int num_pattern = outputs.size() / num_input;
+    double error = 0.0;
+    for (int i = 0; i < num_pattern; ++i) {
+      double e = 0.0;
+      int offset = i * num_output;
+      for (int j = 0; j < num_output; ++j)
+        e += desired_outputs[offset + j] - outputs[offset + j];
+      error += e * e;
+    }
+    return error;
+  }
 
   // A long vector that contains the topology of the whole network.
   // Each neuron id is followed by its input.  Assumption is that the
@@ -264,11 +270,17 @@ class NBN
   // same structure as topology_.
   Eigen::VectorXd weight_;
 
+  std::vector<double> weightcopy_;
+
+  std::vector<double> errors_;
+
   // Index mapping from (i, j) to index in topology_.  Since the
   // connection is undirected, this is a symmetric matrix.  We only
   // use the upper triangle so that the index (i, j) should always
   // satisfy i <= j.
   Eigen::MatrixXi lookup_;
+
+  std::vector<double> error;
 
   nbn_param param_;
 
