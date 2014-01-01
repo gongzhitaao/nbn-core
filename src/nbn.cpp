@@ -114,11 +114,10 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
   Eigen::VectorXd weight_backup(num_weight);
 
   errors_.clear();
-  errors_.push_back(calc_e)
+  errors_.push_back(calcerror(desired_outputs, run(inputs)));
 
   for (int iteration = 0; iteration < max_iteration; ++iteration) {
 
-    double error = 0.0;
     hessian.setZero();
     gradient.setZero();
 
@@ -200,24 +199,18 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
       weight_ = weight_backup + (hessian + param_.mu * Identity).inverse() * gradient;
 
       // calculate error again
-      std::vector<double> tmp_output = run_acn(inputs);
-      error = 0.0;
-      for (int i = 0; i < num_pattern; ++i) {
-        double e = 0.0;
-        for (int j = 0; j < num_output; ++j)
-          e += desired_outputs[i * num_output + j] - tmp_output[i * num_output + j];
-        error += e * e;
-      }
+      double error = calcerror(desired_outputs, run(inputs)),
+        last_error = errors_.back();;
 
       if (error < last_error) {
         if (param_.mu > param_.mu_min)
           param_.mu *= param_.scale_down;
-        last_error = error;
+        errors_.push_back(error);
         break;
       } else {
         ++fail_count;
         if (fail_count > param_.fail_max) {
-          last_error = error;
+          errors_.push_back(error);
           break;
         }
         if (param_.mu < param_.mu_max)
@@ -225,7 +218,7 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
       }
     }
 
-    if (error < max_error)
+    if (errors_.back() < max_error)
       break;
   }
 

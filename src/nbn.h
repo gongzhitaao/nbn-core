@@ -57,13 +57,9 @@ class NBN
 
   nbn_train_enum get_training_algorithm() const { return training_algorithm_; }
 
-<<<<<<< Updated upstream
-  void set_topology(const std::vector<int> &topology, const std::vector<int> &output);
-  const std::vector<int> &get_topology() const { return topology_; }
-=======
   void set_topology(const std::vector<int> &topology,
                     const std::vector<int> &output = std::vector<int>());
->>>>>>> Stashed changes
+  const std::vector<int> &get_topology() const { return topology_; }
 
   void set_gains(const std::vector<double> &gains) { gain_ = gains; }
   const std::vector<double> &get_gains() const { return gain_; }
@@ -229,9 +225,9 @@ class NBN
     return high;
   }
 
-  double calcerror(const std::vector<double> desired_outputs, const std::vector<double outputs) {
+  double calcerror(const std::vector<double> desired_outputs, const std::vector<double> outputs) {
     int num_output = get_num_output();
-    int num_pattern = outputs.size() / num_input;
+    int num_pattern = outputs.size() / num_output;
     double error = 0.0;
     for (int i = 0; i < num_pattern; ++i) {
       double e = 0.0;
