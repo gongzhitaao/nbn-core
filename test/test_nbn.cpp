@@ -20,8 +20,9 @@ class NbnTopologyTest00 : public ::testing::Test {
       6, 1, 3, 2, 4,
       7, 1, 2, 3, 5, 4, 6,
       8, 1, 2, 3, 4, 6, 5};
-    const std::vector<int> outputs = {5, 7, 8};
-    nbn.set_topology(topology, outputs);
+    nbn.set_topology(topology, std::vector<int>());
+    // const std::vector<int> outputs = {5, 7, 8};
+    nbn.set_topology(topology);
   }
 
   static NBN nbn;
@@ -36,7 +37,7 @@ TEST_F(NbnTopologyTest00, get_num_input)
 
 TEST_F(NbnTopologyTest00, get_num_output)
 {
-  ASSERT_EQ(3, nbn.get_num_output());
+  ASSERT_EQ(2, nbn.get_num_output());
 }
 
 TEST_F(NbnTopologyTest00, get_num_connection)
@@ -354,7 +355,7 @@ TEST(NbnTrainingTest, parity7)
   NBN nbn;
   nbn.set_topology(topology, out);
   nbn.init_default();
-  nbn.train(inputs, outputs, 100, 0.001);
+  nbn.train(inputs, outputs, 1000, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
   for (unsigned i = 0; i < output.size(); ++i)
@@ -423,7 +424,7 @@ TEST(NbnTrainingTest, logic_or)
 }
 
 int main(int argc, char** argv) {
-  ::testing::GTEST_FLAG(filter) = "NbnTrainingTest.parity5";
+  ::testing::GTEST_FLAG(filter) = "NbnTopologyTest*";
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
