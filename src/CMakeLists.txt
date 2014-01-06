@@ -1,3 +1,3 @@
+add_library(util STATIC util.cpp util.h)
 add_library(nbn STATIC nbn.cpp nbn.h)
-
-add_executable(main main.cpp nbn)
+target_link_libraries(nbn util)
