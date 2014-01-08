@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -50,10 +51,12 @@ class NBN
     int fail_max;
   };
 
+
   NBN()
       : activation_func_{linear, threshold, threshold_s, sigmoid, tanh}
       , activation_func_d_{linear_d, threshold, threshold_s, sigmoid_d, tanh_d}
       , train_func_{&NBN::ebp, &NBN::nbn}
+      , elapsed_(0.0)
   {}
 
   bool set_training_algorithm(nbn_train_enum training_algorithm);
@@ -66,8 +69,15 @@ class NBN
   void set_gains(const std::vector<double> &gains) { gain_ = gains; }
   const std::vector<double> &get_gains() const { return gain_; }
 
-  void set_weight(const std::vector<double> &weight) { weight_ = Eigen::Map<const Eigen::VectorXd>(weight.data(),weight.size()); }
-  const std::vector<double> &get_weight() const { return weightcopy_; }
+  void set_weights(const std::vector<double> &weight) { weight_ = Eigen::Map<const Eigen::VectorXd>(weight.data(),weight.size()); }
+  void random_weights() {
+    int num_weight = get_num_weight();
+    weight_.resize(num_weight);
+    std::uniform_real_distribution<double> unifd(1.0, 2.0);
+    for (int i = 0; i < num_weight; ++i)
+      weight_[i] = unifd(gen_);
+  }
+  const std::vector<double> &get_weights() const { return weightcopy_; }
 
   void set_activations(const std::vector<nbn_activation_func_enum> &activations) { activation_ = activations; }
   const std::vector<nbn_activation_func_enum> &get_activations() const { return activation_; }
@@ -94,19 +104,17 @@ class NBN
   double get_scale_down() const { return param_.scale_down; }
 
   void init_default() {
-    int num_weight = get_num_weight();
     int num_neuron = get_num_neuron();
 
     // default activation, bipolar
     activation_.resize(num_neuron);
     std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
 
-    // random initialized weights
-    weight_ = Eigen::VectorXd::Ones(num_weight);
-
     // gain will usually be all 1's.
     gain_.resize(num_neuron);
     std::fill(gain_.begin(), gain_.end(), 1.0);
+
+    random_weights();
 
     // nbn parameters
     param_.mu = 0.01;
@@ -161,6 +169,8 @@ class NBN
   int get_neuron_layer(int i) const {
     return bisearch_le(i - 1, layer_index_.data(), get_num_layer() + 1);
   }
+
+  double elapsed() const { return elapsed_; }
 
   bool train(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
              int max_iteration, double max_error) {
@@ -220,8 +230,12 @@ class NBN
   // same structure as topology_.
   Eigen::VectorXd weight_;
 
+  // Just for convinience and uniformity.
   std::vector<double> weightcopy_;
 
+  // Save all errors during training.  This should not be required,
+  // just for debugging or plotting.  In future version, this should
+  // be an option.
   std::vector<double> errors_;
 
   // Index mapping from (i, j) to index in topology_.  Since the
@@ -240,6 +254,12 @@ class NBN
 
   nbn_train_enum training_algorithm_;
   const nbn_train_func_t train_func_[NBN_TRAIN_ENUM];
+
+  // Global random number generator.
+  static std::mt19937 gen_;
+
+  // Total training time in seconds.
+  double elapsed_;
 };
 
 #endif	// NBN_H_

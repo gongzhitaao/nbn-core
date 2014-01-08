@@ -2,7 +2,8 @@
 
 #include <algorithm>
 #include <limits>
-#include <iostream>
+
+std::mt19937 NBN::gen_;
 
 void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
 {
@@ -87,6 +88,8 @@ bool NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desi
 bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
+  Timer timer;
+
   int num_input = get_num_input();
   int num_output = get_num_output();
   int num_neuron = get_num_neuron();
@@ -219,7 +222,9 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
   weightcopy_.clear();
   weightcopy_.insert(weightcopy_.end(), weight_.data(), weight_.data() + weight_.size());
 
-  return false;
+  elapsed_ = timer.elapsed();
+
+  return errors_.back() < max_error;
 }
 
 std::vector<double> NBN::run(const std::vector<double> &inputs) const
