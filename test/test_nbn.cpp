@@ -310,7 +310,7 @@ TEST(NbnTrainingTest, parity3)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -331,7 +331,7 @@ TEST(NbnTrainingTest, parity5)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -353,7 +353,7 @@ TEST(NbnTrainingTest, parity7)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 1000, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -373,7 +373,7 @@ TEST(NbnTrainingTest, logic_xor)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -393,7 +393,7 @@ TEST(NbnTrainingTest, logic_and)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -413,7 +413,7 @@ TEST(NbnTrainingTest, logic_or)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);

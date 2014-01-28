@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <limits>
 
-std::mt19937 NBN::gen_;
+std::random_device rd;
+std::mt19937 NBN::gen_(rd());
 
-void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
+void
+NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
 {
   // Topology in config files are 1-based, while in program, 0-based
   // are more convenient.
@@ -77,15 +79,19 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
     if (neuron > j) j = neuron;
     lookup_(neuron, j) = i;
   }
+
+  init();
 }
 
-bool NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool
+NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
   return true;
 }
 
-bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool
+NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
   Timer timer;
@@ -227,7 +233,8 @@ bool NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desi
   return errors_.back() < max_error;
 }
 
-std::vector<double> NBN::run(const std::vector<double> &inputs) const
+std::vector<double>
+NBN::run(const std::vector<double> &inputs) const
 {
   int num_input = get_num_input();
   int num_neuron = get_num_neuron();
@@ -255,4 +262,30 @@ std::vector<double> NBN::run(const std::vector<double> &inputs) const
   }
 
   return ret;
+}
+
+void
+NBN::random_weights()
+{
+  int num_weight = get_num_weight();
+  weight_.resize(num_weight);
+  std::uniform_real_distribution<double> unifd(0.0, 1.0);
+  for (int i = 0; i < num_weight; ++i)
+    weight_[i] = unifd(gen_);
+}
+
+void
+NBN::init()
+{
+  int num_neuron = get_num_neuron();
+
+  // default activation, bipolar
+  activation_.resize(num_neuron);
+  std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
+
+  // gain will usually be all 1's.
+  gain_.resize(num_neuron);
+  std::fill(gain_.begin(), gain_.end(), 1.0);
+
+  random_weights();
 }
