@@ -20,8 +20,7 @@ class NbnTopologyTest00 : public ::testing::Test {
       6, 1, 3, 2, 4,
       7, 1, 2, 3, 5, 4, 6,
       8, 1, 2, 3, 4, 6, 5};
-    nbn.set_topology(topology, std::vector<int>());
-    // const std::vector<int> outputs = {5, 7, 8};
+    // const std::vector<int> outputs = {7, 8};
     nbn.set_topology(topology);
   }
 
@@ -57,7 +56,7 @@ TEST_F(NbnTopologyTest00, get_num_neuron)
 
 TEST_F(NbnTopologyTest00, get_layer_size)
 {
-  const std::vector<int> layer_size = {2, 2, 2};
+  const std::vector<int> layer_size = {2, 2, 2, 2};
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
@@ -77,8 +76,8 @@ class NbnTopologyTest01 : public ::testing::Test {
  protected:
   static void SetUpTestCase() {
     const std::vector<int> topology = {2, 1};
-    const std::vector<int> outputs = {2};
-    nbn.set_topology(topology, outputs);
+    // const std::vector<int> outputs = {2};
+    nbn.set_topology(topology);
   }
 
   static NBN nbn;
@@ -113,7 +112,7 @@ TEST_F(NbnTopologyTest01, get_num_neuron)
 
 TEST_F(NbnTopologyTest01, get_layer_size)
 {
-  const std::vector<int> layer_size = {1};
+  const std::vector<int> layer_size = {1, 1};
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
@@ -130,7 +129,7 @@ class NbnTopologyTest02 : public ::testing::Test {
       2, 1,
       3, 2, 1,
       4, 1, 2, 3};
-    const std::vector<int> outputs = {4};
+    const std::vector<int> outputs = {3, 4};
     nbn.set_topology(topology, outputs);
   }
 
@@ -146,7 +145,7 @@ TEST_F(NbnTopologyTest02, get_num_input)
 
 TEST_F(NbnTopologyTest02, get_num_output)
 {
-  ASSERT_EQ(1, nbn.get_num_output());
+  ASSERT_EQ(2, nbn.get_num_output());
 }
 
 TEST_F(NbnTopologyTest02, get_num_connection)
@@ -166,7 +165,7 @@ TEST_F(NbnTopologyTest02, get_num_neuron)
 
 TEST_F(NbnTopologyTest02, get_layer_size)
 {
-  const std::vector<int> layer_size = {1, 1, 1};
+  const std::vector<int> layer_size = {1, 1, 1, 1};
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
@@ -225,7 +224,7 @@ TEST_F(NbnTopologyTest03, get_num_neuron)
 
 TEST_F(NbnTopologyTest03, get_layer_size)
 {
-  const std::vector<int> layer_size = {3, 3, 1};
+  const std::vector<int> layer_size = {2, 3, 3, 1};
   ASSERT_EQ(layer_size, nbn.get_layer_size());
 }
 
@@ -311,7 +310,7 @@ TEST(NbnTrainingTest, parity3)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -332,7 +331,7 @@ TEST(NbnTrainingTest, parity5)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 100, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -354,7 +353,7 @@ TEST(NbnTrainingTest, parity7)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 1000, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -374,7 +373,7 @@ TEST(NbnTrainingTest, logic_xor)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -394,7 +393,7 @@ TEST(NbnTrainingTest, logic_and)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -414,7 +413,7 @@ TEST(NbnTrainingTest, logic_or)
 
   NBN nbn;
   nbn.set_topology(topology, out);
-  nbn.init_default();
+
   nbn.train(inputs, outputs, 50, 0.001);
 
   std::vector<double> output = nbn.run(inputs);
@@ -424,7 +423,7 @@ TEST(NbnTrainingTest, logic_or)
 }
 
 int main(int argc, char** argv) {
-  ::testing::GTEST_FLAG(filter) = "NbnTopologyTest*";
+  ::testing::GTEST_FLAG(filter) = "NbnTrainingTest*";
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
