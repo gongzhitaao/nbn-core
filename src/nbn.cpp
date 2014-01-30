@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <limits>
-#include <iostream>
 
-void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
+std::random_device rd;
+std::mt19937 NBN::gen_(rd());
+
+void
+NBN::set_topology(const std::vector<int> &topology, const std::vector<int> &output)
 {
   // Topology in config files are 1-based, while in program, 0-based
   // are more convenient.
@@ -15,6 +18,9 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   neuron_index_.clear();
   layer_index_.clear();
 
+  // Parse the topology vector to get general architecture information
+  // of the neural network, number of inputs, number of outputs, layer
+  // sizes and etc.
   neuron_index_.push_back(0);
   layer_index_.push_back(0);
   layer_index_.push_back(topology_[0]);
@@ -39,6 +45,10 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
   int num_input = get_num_input();
   int num_neuron = get_num_neuron();
 
+  // Most of the cases, outputs appear in the last layer, i.e., output
+  // layers.  But in rare cases, we might want outputs from hidden
+  // layers.
+  output_id_.clear();
   if (output.size() > 0) {
       // 1-based to 0-based
       output_id_.resize(output.size());
@@ -69,29 +79,23 @@ void NBN::set_topology(const std::vector<int> &topology, const std::vector<int> 
     if (neuron > j) j = neuron;
     lookup_(neuron, j) = i;
   }
+
+  init();
 }
 
-bool NBN::mlp_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool
+NBN::ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
   return true;
 }
 
-bool NBN::mlp_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
+bool
+NBN::nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
               int max_iteration, double max_error)
 {
-  return true;
-}
+  Timer timer;
 
-bool NBN::acn_ebp(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
-              int max_iteration, double max_error)
-{
-  return true;
-}
-
-bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &desired_outputs,
-              int max_iteration, double max_error)
-{
   int num_input = get_num_input();
   int num_output = get_num_output();
   int num_neuron = get_num_neuron();
@@ -140,10 +144,9 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
         double net = weight_[beg];
         for (int j = beg + 1; j < end; ++j)
           net += weight_[j] * output[topology_[j]];
-        output[ind] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
+        output[ind] = activation_func_[activation_[i]](net, gain_[i]);
 
-        double derivative = CALL_MEMBER_FUNC(this, activation_func_d_[activation_[i]])
-                            (output[ind], gain_[i]);
+        double derivative = activation_func_d_[activation_[i]](output[ind], gain_[i]);
 
         // Update delta table.
         delta(i, i) = derivative;
@@ -200,7 +203,7 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
 
       // calculate error again
       double error = calcerror(desired_outputs, run(inputs)),
-        last_error = errors_.back();;
+        last_error = errors_.back();
 
       if (error < last_error) {
         if (param_.mu > param_.mu_min)
@@ -225,15 +228,13 @@ bool NBN::acn_nbn(const std::vector<double> &inputs, const std::vector<double> &
   weightcopy_.clear();
   weightcopy_.insert(weightcopy_.end(), weight_.data(), weight_.data() + weight_.size());
 
-  return false;
+  elapsed_ = timer.elapsed();
+
+  return errors_.back() < max_error;
 }
 
-std::vector<double> NBN::run_mlp(const std::vector<double> &inputs) const
-{
-  return std::vector<double>();
-}
-
-std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
+std::vector<double>
+NBN::run(const std::vector<double> &inputs) const
 {
   int num_input = get_num_input();
   int num_neuron = get_num_neuron();
@@ -253,7 +254,7 @@ std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
       double net = weight_[beg];
       for (int j = beg + 1; j < end; ++j)
         net += weight_[j] * output[topology_[j]];
-      output[i + num_input] = CALL_MEMBER_FUNC(this, activation_func_[activation_[i]])(net, gain_[i]);
+      output[i + num_input] = activation_func_[activation_[i]](net, gain_[i]);
     }
 
     for (int i = 0, offset = ind_pattern * num_output; i < num_output; ++i)
@@ -261,4 +262,30 @@ std::vector<double> NBN::run_acn(const std::vector<double> &inputs) const
   }
 
   return ret;
+}
+
+void
+NBN::random_weights()
+{
+  int num_weight = get_num_weight();
+  weight_.resize(num_weight);
+  std::uniform_real_distribution<double> unifd(0.0, 1.0);
+  for (int i = 0; i < num_weight; ++i)
+    weight_[i] = unifd(gen_);
+}
+
+void
+NBN::init()
+{
+  int num_neuron = get_num_neuron();
+
+  // default activation, bipolar
+  activation_.resize(num_neuron);
+  std::fill(activation_.begin(), activation_.end(), NBN_SIGMOID_SYMMETRIC);
+
+  // gain will usually be all 1's.
+  gain_.resize(num_neuron);
+  std::fill(gain_.begin(), gain_.end(), 1.0);
+
+  random_weights();
 }
